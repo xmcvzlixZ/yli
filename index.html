@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Developement Tool</title>
+    <style>
+
+          /* --- General Styles --- */
+        body {font: 16px sans-serif; margin: 20px; color: #fcfcfc; background-color: #000000; overflow-y: hidden;} /*  [CORRECCIÓN CSS]: overflow-y al body, fuera de #cmd-line */
+        h1 {text-align: center; margin-bottom: 20px; color: #f5f2f2;}
+
+        /* --- Main Containers --- */
+        #db-btns, #lib-conv-btns, #cmd-line {display: flex; gap: 10px; margin-top: 20px; justify-content: center;}
+        #lib-conv-btns {display: none;} /* Hidden by default */
+
+
+        /* --- Command Line --- */
+        #cmd-line {
+            display: flex;
+            flex-direction: column; /* <--  [CCIÓN CSS]: Disposición vertical para el notepad */
+            gap: 10px;
+            margin-top: -15px;
+            border-border: none;
+			outline: none;
+
+
+            justify-content: center; /* Puedes mantener o eliminar esto, no afecta la posición vertical */
+        }
+        #cmd-input {flex-grow: 1; padding: 5px; border: 1px solid #ccc; font: 0.9em monospace; box-sizing: border-box;}
+#cmd-input {
+  background-color: black;
+  color: lavender;
+  border-top: none;
+  outline: none;
+   background-color: #0a0a0a; /* Mismo color de fondo que el textarea */
+}
+        /* --- Buttons --- */
+        #exec-btn, #db-btns button, #lib-conv-btns button {
+            padding: 10px 15px; border: 1px solid #ccc; cursor: pointer;
+            background-color: #; transition: background-color 0.3s ease; border-radius: 5px;
+        }
+        #exec-btn:hover, #db-btns button:hover, #db-btns button:hover {background-color: #ddd;}
+
+html {
+              color: rgb(255, 255, 255); /* white */
+            }
+            body {
+              color: rgb(255, 255, 255); /* white */
+            }
+            h1 {
+              color: rgb(255, 255, 255); /* white */
+            }
+
+
+    /* ---  [CCIÓN CSS]: Styles for colored messages --- */
+        .mensaje-error {
+            color: red;
+            font-weight: bold; /* Opcional: Negrita para errores */
+        }
+
+        .mensaje-exito {
+            color: green;
+        }
+
+        .mensaje-ayuda {
+            color: lightyellow;
+            background-color: black; /* Fondo negro para contraste con amarillo claro */
+            /* color: black;  [CORRECCIÓN]: No es necesario forzar color negro, ya que lightyellow sobre negro ya tiene buen contraste */
+        }
+
+        .mensaje-general {
+            color: violet;
+        }
+
+        /* ---  [NUEVO - CSS para la salida de comandos]  --- */
+        .mensaje-comando-salida {
+            color: lavender; /* Azul claro para la salida de comandos (puedes ajustarlo) */
+        }
+
+
+        /* ---  [NUEVO - CSS para el mensaje de bienvenida]  --- */
+        .mensaje-bienvenida {
+            color: gray; /* Azul claro para el mensaje de bienvenida */
+        }
+
+        /* ---  [NUEVO - CSS para titulos de modo]  --- */
+        .mensaje-fplugmode-titulo {
+            color: white; /* Blanco para el título de Fplugmode */
+        }
+
+        .mensaje-librarymode-titulo {
+            color: darkviolet; /* Morado oscuro para el título de Librarymode */
+        }
+
+        /* --- Output Area --- */
+        #output {
+            width: 100%; height: 550px; margin-top: 10px; padding: 10px;
+            border: 1px solid #ccc; font: 0.9em monospace; background-color: #0a0a0a;
+            vertical-align: top; resize: vertical; overflow: auto; box-sizing: border-box;
+            min-height: 100px; tab-size: 4;
+			outline: none;
+			 overflow: auto;
+			 -ms-overflow-style: none;
+			 scrollbar-width: none;
+        }
+    scrollbar-width: none;
+        }
+
+        #output::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* ---  [NUEVO - CSS para el prefijo del comando '>']  --- */
+        .command-prefix {
+            color: limegreen; /*  <-- ¡Aquí puedes cambiar el color del '>'!  */
+            font-weight: bold; /* Opcional: Negrita para el '>' */
+            margin-right: 5px; /* Opcional: Separación a la derecha del '>' */
+        }
+
+    </style>
+</head>
+
+<body>
+    <h1>GGS</h1>
+    <div id="db-btns" style="display: flex;">
+
+
+    </div>
+
+    <div id="lib-conv-btns" style="display: none;">
+
+    </div>
+
+    <div id="output" style="overflow: auto; white-space: pre-wrap; font-family: monospace; border: 1px solid #ccc; padding: 10px; background-color: #0a0a0a; color: white; min-height: 100px; box-sizing: border-box; outline: none;">Output will be shown here</div>
+    <div id="cmd-line">
+        <input type="text" id="cmd-input" placeholder="Enter command">
+
+    </div>
+
+        </div>
+    </div>
+
+    <script>
+
+        const outputArea = document.getElementById('output');
+        const cmdInput = document.getElementById('cmd-input');
+        const dbButtonsDiv = document.getElementById('db-btns');
+        const libConvButtonsDiv = document.getElementById('lib-conv-btns');
+        let spectrumValue = "010";
+        let isLibMode = false;
+        let loadedLibs = [];
+        let currentLib = null;
+        let isUpdateEnvActive = false; // **[NUEVO]** Variable para rastrear el estado del entorno de actualizaciones
+        let isFplugmodeActive = false; // **[NUEVO]** Variable para rastrear el estado Fplugmode
+        let stagedUpdateContent = null; // **[NUEVO]** Variable para almacenar el contenido .up en memoria
+        let loadedGgsScriptContent = null; // **[NEW VARIABLE JS]** - To store loaded .ggs script content
+        let loadedFplugPlugins = []; // **[NEW VARIABLE JS]** - To track loaded Fplugmode plugins  **[NEW - TRACK LOADED PLUGIN FILES]**
+
+        // **[NUEVO VARIABLE JS]** - To track if output area has been cleared from initial text
+        let isOutputAreaCleared = false;
+
+        const db = {
+            tables: {},
+            createTable: function(tableName) {
+                if (!this.spectrumValueGuard()) {
+                    this.displayMsg(`[Spectrum Value: ${spectrumValue}] Spectrum value is not '<c>'. Table creation might be limited for table "${tableName}".`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                    return;
+                }
+                if (this.tables[tableName]) {
+                    this.displayMsg(`[Spectrum Value: <c>] Table "${tableName}" already exists.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    return;
+                }
+                this.tables[tableName] = [];
+                this.displayMsg(`[Spectrum Value: <c>] Table "${tableName}" created.`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+            },
+            resetDB: function() {
+                this.tables = {};
+            },
+            tableExists: function(tableName) {
+                return this.tables.hasOwnProperty(tableName);
+            },
+            spectrumValueGuard: function() {
+                return spectrumValue === "<c>";
+            },
+            displayMsg: function(message, tipo = 'general') { //  [MODIFICACIÓN JS]: Añadido 'tipo' y valor por defecto 'general'
+                console.log("--- db.displayMsg() - LLAMADA con mensaje:", message, "Tipo:", tipo);
+
+                // **[NUEVO - MODIFICACIÓN JS]** - Clear initial text on first message
+                if (!isOutputAreaCleared) {
+                    outputArea.innerHTML = "";
+                    isOutputAreaCleared = true;
+                }
+
+                // outputArea.value = outputArea.value + "\n" + message; //  [MODIFICACIÓN JS]:  REEMPLAZADO por la versión coloreada
+                let messageSpan = document.createElement('span'); //  [MODIFICACIÓN JS]: Crear span para el mensaje
+                // messageSpan.textContent = message; //  [MODIFICACIÓN JS]: Asignar texto al span  <-- ¡REEMPLAZADO por innerHTML!
+                messageSpan.classList.add(`mensaje-${tipo}`); //  [MODIFICACIÓN JS]: Añadir clase CSS según el tipo
+
+                // [NUEVO - MODIFICACIÓN]: Construir HTML para el mensaje, separando el prefijo '>'
+                let mensajeHTML = `<span class="command-prefix">&gt;</span> <span class="command-text ${tipo === 'comando-salida' ? 'mensaje-comando-salida' : ''}">${message}</span>`; // [MODIFICACIÓN JS - tipo comando-salida]
+                messageSpan.innerHTML = mensajeHTML; // [NUEVO - MODIFICACIÓN]: Usar innerHTML para insertar HTML
+
+                outputArea.appendChild(messageSpan); //  [MODIFICACIÓN JS]: Añadir span al outputArea
+                outputArea.appendChild(document.createElement('br')); //  [MODIFICACIÓN JS]: Añadir salto de línea después del mensaje
+                console.log(message);
+            }
+        };
+
+        function mostrarMensaje(mensaje, tipo = 'general') { //  [MODIFICACIÓN JS]: Añadido 'tipo' y valor por defecto 'general'
+            console.log("--- mostrarMensaje() - LLAMADA con mensaje:", mensaje, "Tipo:", tipo); // **[DEPURACIÓN - mostrarMensaje]**
+            db.displayMsg(mensaje, tipo); //  [MODIFICACIÓN JS]: Reutilizar db.displayMsg para mantener consistencia
+        }
+
+
+        function testDB() {
+            mostrarMensaje("--- Testing with Spectrum Value '010' (Default) ---", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            db.createTable("table1");
+            db.createTable("table2");
+            db.createTable("table1");
+
+            spectrumValue = "<c>";
+
+            mostrarMensaje("\n--- Testing with Spectrum Value '<c>' (Database Access) ---", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            db.createTable("test_table");
+        }
+
+        // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]**:
+        function showOpenFilePanel(options) {
+            return new Promise((resolve, reject) => {
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.style.display = 'none'; // Hide the input visually
+                fileInput.multiple = options && options.multiple === true; // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Set multiple attribute based on options
+
+                // **[NEW - OPTIONAL]** Get the format name from options (if provided)
+                const formatName = options && options.formatName ? options.formatName : 'archivo'; // Default format "archivo"
+
+                // Configure the file type filter if options are provided (options.filters)
+                if (options && options.filters && Array.isArray(options.filters)) {
+                    const acceptedExtensions = options.filters.reduce((extensions, filter) => {
+                        if (filter.extensions && Array.isArray(filter.extensions)) {
+                            return extensions.concat(filter.extensions.map(ext => `.${ext}`));
+                        }
+                        return extensions;
+                    }, []);
+                    if (acceptedExtensions.length > 0) {
+                        fileInput.accept = acceptedExtensions.join(','); // Set the accept attribute with extensions
+                    }
+                }
+
+                fileInput.onchange = function(event) {
+                    const files = Array.from(event.target.files); // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Get FileList as Array
+                    document.body.removeChild(fileInput); // Clean up the input after use
+
+                    if (files && files.length > 0) { // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Check if files are selected
+                        const fileInfos = []; // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Array to store file info objects
+                        let filesReadCount = 0; // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Counter for read files
+
+                        files.forEach(file => { // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Iterate over selected files
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                const fileContent = e.target.result;
+                                fileInfos.push({ // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Push file info to the array
+                                    name: file.name,
+                                    path: 'TODO: Obtener la ruta completa si es necesario',
+                                    file: file,
+                                    content: fileContent
+                                });
+                                filesReadCount++;
+                                if (filesReadCount === files.length) { // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Resolve when all files are read
+                                    mostrarMensaje(`Archivos ${formatName} seleccionados (desde showOpenFilePanel REAL): ${files.length} archivos.`, 'exito'); // **[MODIFICADO]** Mensaje para carga multiple y tipo 'exito'
+                                    resolve(fileInfos); // **[CORRECCIÓN - showOpenFilePanel - CARGA MÚLTIPLE CORRECTA]** - Resolve promise with array of fileInfos
+                                }
+                            };
+                            reader.onerror = function() {
+                                mostrarMensaje(`Error al leer el archivo ${file.name} (desde showOpenFilePanel REAL).`, 'error'); // **[MODIFICADO]** Mensaje individual por archivo con error y tipo 'error'
+                                filesReadCount++; // Increment count even on error to ensure resolution
+                                if (filesReadCount === files.length) { // Resolve even if some files failed to read (resolve with what was read)
+                                    resolve(fileInfos); // Resolve with successfully read files - even if some failed
+                                }
+                            };
+                            reader.readAsText(file);
+                        });
+                    } else {
+                        // No file selected (user cancelled)
+                        mostrarMensaje(`No se seleccionó ningún archivo ${formatName} (desde showOpenFilePanel REAL).`, 'general'); // **[MODIFICADO]** Mensaje para cancelación y tipo 'general'
+                        resolve(null); // Resolve the promise with null
+                    }
+                };
+
+                fileInput.onerror = function(error) {
+                    document.body.removeChild(fileInput); // Clean up the input in case of error
+                    mostrarMensaje(`Error al abrir el explorador de archivos (desde showOpenFilePanel REAL): ${error}`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    reject(error); // Reject the promise in case of error
+                };
+
+                document.body.appendChild(fileInput);
+                fileInput.click(); // Simulate a click on the input to open the file dialog
+            });
+        }
+
+
+        // **[CHANGE 2]:** `testLibFunc` now accepts a library as an argument to be reusable
+        function testLibFunc(library, libraryName) {
+            if (!library || !library.libraryContent) {
+                mostrarMensaje(`Error: Library "${libraryName || 'unknown'}" is empty or invalid.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                return;
+            }
+
+            mostrarMensaje(`--- Starting library function tests for library: ${libraryName || 'Unknown Library'}... ---`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            const libFuncs = library.libraryContent;
+            let testResults = {};
+
+            for (const funcName in libFuncs) {
+                if (libFuncs.hasOwnProperty(funcName)) {
+                    const funcCode = libFuncs[funcName];
+                    try {
+                        const executableFunc = eval(`(${funcCode})`);
+                        if (typeof executableFunc === 'function') {
+                            executableFunc();
+                            testResults[funcName] = 'Success';
+                            mostrarMensaje(`Testing function '${funcName}': Success`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+                        } else {
+                            testResults[funcName] = 'Error - Not a valid function code.';
+                            mostrarMensaje(`Testing function '${funcName}': Error - Not a valid function code.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                        }
+                    } catch (error) {
+                        testResults[funcName] = `Error during execution - ${error}`;
+                        mostrarMensaje(`Testing function '${funcName}': Error during execution - ${error}`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    }
+                }
+            }
+            mostrarMensaje(`--- Library function tests completed for library: ${libraryName || 'Unknown Library'}. ---`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return testResults; // Return the results for possible use
+        }
+
+
+        // **[CHANGE 3]:** `testLibFuncs` (plural) iterates over `loadedLibs` and tests each library
+        function testLibFuncs() {
+            if (loadedLibs.length === 0) {
+                mostrarMensaje("Error: No libraries imported. Use 'Libg' to import libraries (.li) first.", 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                return;
+            }
+
+            mostrarMensaje("--- Starting tests for all loaded libraries... ---", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            let allTestResults = {};
+
+            loadedLibs.forEach((library, index) => {
+                const libraryName = library.libraryName || `Library ${index + 1}`; // Library name or index if no name
+                const libraryResults = testLibFunc(library, libraryName); // Reuse `testLibFunc` for each library
+                allTestResults[libraryName] = libraryResults; // Save results by library name
+                mostrarMensaje(`\n--- Tests for ${libraryName} completed. See results above. ---`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            });
+
+            mostrarMensaje("--- Tests for all loaded libraries completed. ---", 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+            console.log("All Test Results:", allTestResults); // Optional: Show detailed results in console
+            // Here you could process `allTestResults` to show a general summary in `outputArea` if needed.
+        }
+
+
+        function execCmd() {
+            const cmdText = cmdInput.value.trim();
+            cmdInput.value = "";
+
+            if (!cmdText) return;
+
+            // [CCIÓN JS]: Mostrar el comando introducido por el usuario en el output, coloreado
+            mostrarMensaje(`${cmdText}`, 'comando-salida'); // Usamos la función mostrarMensaje con tipo 'comando-salida' para colorearlo [MODIFICACIÓN JS - tipo comando-salida]
+
+            const [command, ...args] = cmdText.split(" ");
+            console.log(`--- execCmd() - Command: ${command}, Args: ${args}, isLibMode: ${isLibMode}, isUpdateEnvActive: ${isUpdateEnvActive}, isFplugmodeActive: ${isFplugmodeActive}`); // **[MODIFICADO]** Log isFplugmodeActive
+
+            try { // **[DEPURACIÓN - try...catch EN execCmd ORIGINAL]**
+                console.log("--- originalExecCmd() - INICIO ---"); // **[DEPURACIÓN - LOG INICIO originalExecCmd]**
+
+                if (isLibMode) {
+                    handleLibModeCmds(command, args);
+                } else if (isUpdateEnvActive) {
+                    handleUpdateEnvCmds(command, args);
+                } else if (isFplugmodeActive) { // **[NUEVO]** Manejo de comandos en modo Fplugmode
+                    handleFplugmodeCmds(command, args); // **[NUEVO]** Llama a la función para comandos de Fplugmode
+                }
+                else {
+                    handleNormalCmds(command, args);
+                }
+
+                console.log("--- originalExecCmd() - FIN ---"); // **[DEPURACIÓN - LOG FIN originalExecCmd]**
+
+            } catch (error) { // **[DEPURACIÓN - try...catch EN execCmd ORIGINAL]**
+                console.error("--- ERROR en originalExecCmd() - Error Capturado: ", error); // **[DEPURACIÓN - LOG ERROR CAPTURADO]**
+                mostrarMensaje(`--- ERROR al ejecutar comando: ${error}`, 'error'); // **[OPCIONAL - Mostrar mensaje de error en la herramienta]  [MODIFICACIÓN JS]: Tipo 'error'
+            }
+        }
+
+        function handleLibModeCmds(command, args) {
+            console.log(`--- handleLibModeCmds() - Command Recibido: ${command}, Args: ${args}`);
+            console.log(`--- execCmd() - LibraryCONVERT Mode ---`);
+            switch (command) {
+                case "libg":
+                    loadLibsFromFile(); // **[CHANGE 4]:** Now calls `loadLibsFromFile` (plural)
+                    break;
+                case "tlib":
+                    testLibFuncs(); // **[CHANGE 5]:** `Tlib` now tests only the `currentLib` (the last loaded)
+                    break;
+                // **[REMOVED - REQUESTED]**: Tlibg is removed
+                case "cvrt":
+                    convertTxtToLi();
+                    break;
+                case "closelibrarymode":
+                    exitLibMode();
+                    break;
+                case "help":
+                    // **[MODIFIED HELP - REMOVED Tlibg, ADDED Lipkx, Lipkm]**
+                    mostrarMensaje("Available commands (librarymode):\n- libg (opens file explorer for .li libraries - supports multiple selection)\n- lipkm (opens file explorer for .lipk libraries - exclusively .lipk format)\n- lipkx (exports loaded libraries to a .lipk library package file)\n- tlib (tests all loaded libraries)\n- cvrt (convert .txt to .li library file)\n- fsleephelp (displays information about **12 Dormant Functions**)\n- closelibrarymode (exits librarymode)\n- help (displays this help message)", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+                    break;
+                // **[NEW COMMAND]**: Fsleephelp - Displays help for dormant functions
+                case "fsleephelp":
+                    displayDormantFunctionsHelp();
+                    break;
+                // **[NEW COMMAND - Lipkx]**
+                case "lipkx":
+                    exportLoadedLibsToLipk(); // Function to export libraries to .lipk
+                    break;
+                // **[NEW COMMAND - Lipkm - in librarymode]**
+                case "lipkm":
+                    loadLipkFromFile(); // Function to load .lipk library package
+                    break;
+                default:
+                    mostrarMensaje(`Error: Unknown command in librarymode: ${command}. Type 'help' for available commands.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            }
+        }
+
+        function handleNormalCmds(command, args) {
+            console.log(`--- handleNormalCmds() - Normal Mode ---`);
+            switch (command) {
+
+                case "flugmode": // **[NUEVO]** Comando para entrar al entorno Fplugmode
+                    enterFplugmode(); // **[NUEVO]** Función para entrar a Fplugmode
+                    break;
+                case "tablecreate":
+                    if (args.length === 1) {
+                        db.createTable(args[0]);
+                    } else {
+                        mostrarMensaje("Error: Usage: createTable <tableName>", 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    }
+                    break;
+                case "setspectrum":
+                    if (args.length === 1) {
+                        spectrumValue = args[0];
+                        mostrarMensaje(`Spectrum value set to: ${spectrumValue}`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+                    } else {
+                        mostrarMensaje("Error: Usage: setSpectrum <value>", 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    }
+                    break;
+                case "re":
+                    resetSys();
+                    break;
+                case "help":
+                    displayHelp();
+                    break;
+                case "exp":
+                    saveDB();
+                    break;
+                case "mp":
+                    loadDBFromFile();
+                    break;
+                case "existstable":
+                    checkTblExists(args);
+                    break;
+                case "librarymode":
+                    enterLibMode();
+                    break;
+                case "libg":
+                    loadLibsFromFile(); // **[CHANGE 7]:** In normal mode `Libg` also loads multiple .li
+                    break;
+                // **[NEW COMMAND - Lipkm - in normal mode]**
+                case "lipkm":
+                    loadLipkFromFile(); // Function to load .lipk library package - ALSO IN NORMAL MODE
+                    break;
+                // **[NEW COMMAND]** - descrip
+                case "descrip":
+                    mostrarMensaje("Developed by Emmanvelle and made in The Republic of Venezuela. Debugger and development tool. ", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                    break;
+					case "ggss":
+					testDB();
+					break;
+                // **[NEW COMMAND - Scripting - sk]**
+                case "sk":
+                    loadGgsScriptFromFile(); // Function to load .ggs script file
+                    break;
+                // **[NEW COMMAND - Scripting - run]**
+                case "run":
+                    executeGgsScript();     // Function to execute loaded .ggs script file
+                    break;
+                default:
+                    execLibCmd(command, args);
+            }
+        }
+
+        function handleFplugmodeCmds(command, args) { // **[NUEVO]** Función para comandos del entorno Fplugmode
+            console.log(`--- handleFplugmodeCmds() - fplugmode Mode - Command: ${command}, Args: ${args}`);
+            switch (command) {
+                case "help": // **[NUEVO]** Comando help en modo Fplugmode
+                    displayFplugmodeHelp(); // **[NUEVO]** Función para mostrar ayuda de Fplugmode
+                    break;
+                case "closeflugmode": // **[NUEVO]** Comando para cerrar Fplugmode
+                    exitFplugmode(); // **[NUEVO]** Función para salir de Fplugmode
+                    break;
+                // **[MODIFICACIÓN - impor - Carga Múltiple]**
+                case "impor":
+                    executeImporFiles(); // **[MODIFICACIÓN - impor - Carga Múltiple]**  Ahora usa la función para carga múltiple
+                    break;
+                // **[MODIFICACIÓN Tflug CORRECTA - AHORA TESTEA TODAS LAS FUNCIONES]**
+                case "tflug":
+                    testAllFplugFunctions(); // **[MODIFICACIÓN Tflug CORRECTA - AHORA TESTEA TODAS LAS FUNCIONES]**  Testea TODAS las funciones de plugins cargados
+                    break;
+                // **[NEW COMMAND - imporpkx]**
+                case "imporpkx":
+                    exportFplugmodePluginsToInpk(); // Function to export Fplugmode plugins to .inpk
+                    break;
+                // **[NEW COMMAND - imporpkm]**
+                case "imporpkm":
+                    loadInpkFromFile(); // Function to load .inpk plugin package
+                    break;
+                default:
+                    mostrarMensaje(`Error: Unknown command in Fplugmode: ${command}. Type 'help' for available commands.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            }
+        }
+
+        function displayFplugmodeHelp() { // **[NUEVO]** Función para mostrar ayuda de Fplugmode
+            // **[MODIFICACIÓN HELP - AÑADIDO impor, imporpkx, imporpkm, tflug]**
+            const helpMsg = "Available commands (Fplugmode):\n- help (displays this help message)\n- closeflugmode (exits Fplugmode)\n- impor (opens file explorer and imports **multiple** Javascript functions from **.in files - supports multiple selection**)\n- imporpkx (exports **all loaded .in plugins** to a **.inpk plugin package file**)\n- imporpkm (opens file explorer for **.inpk plugin package files** - exclusively .inpk format - **imports multiple .in plugins from package**)\n- tflug (tests if **ALL functions from ALL imported .in files** are loaded and executable)"; // **[MODIFICACIÓN HELP - AÑADIDO impor, imporpkx, imporpkm, tflug - AYUDA ACTUALIZADA]** Ayuda actualizada para los comandos de Flugmode
+            mostrarMensaje(helpMsg, 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+        }
+
+        function displayHelp() {
+            // **[MODIFIED HELP - ADDED Lipkm to normal help - AND SCRIPTING COMMANDS - AND Fplugmode Commands]**
+            const helpMsg = "Available commands:\n- createtable <tableName>\n- descrip\n- existstable <tableName>\n- exp (export database)\n- flugmode (enters Fplugmode - for importing Javascript functions from .in files)\n- ggss (for test GGS)\n- help\n- libg (load library - supports multiple selection)\n- librarymode (enter library convert mode)\n- lipkm (load .lipk library package - exclusively .lipk format)\n- mp (import database)\n- re (reset)\n- run (execute loaded .ggs script)\n- sk (import .ggs script file)\n- setspectrum <value>\n\n--- Fplugmode Commands: ---\n After entering 'flugmode' environment:\n- impor\n- imporpkx\n- imporpkm\n- tflug\n- closeflugmode\n- help (in fplugmode)"; // **[MODIFICADO]** Añadido flugmode, Lipkm, SK y RUN a la ayuda - **AÑADIDOS COMANDOS Fplugmode EN AYUDA GENERAL**
+            mostrarMensaje(helpMsg, 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+        }
+
+
+        function exitFplugmode() { // **[NUEVO]** Función para salir del entorno Fplugmode
+            isFplugmodeActive = false; // Establece la variable de estado a false para Fplugmode
+            dbButtonsDiv.style.display = 'flex'; // Restaurar botones DB (si se ocultaron)
+            libConvButtonsDiv.style.display = 'flex'; // Restaurar botones LibConv (si se ocultaron)
+            outputArea.value = "";
+            mostrarMensaje("--- Exited Fplugmode Environment ---", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            loadedFplugPlugins = []; // **[NEW]** Clear loaded Fplugmode plugins when exiting Fplugmode
+        }
+
+        // **[MODIFICACIÓN - impor - Carga Múltiple] - Función executeImporFiles (plural - para carga multiple)**
+        function executeImporFiles() {
+            showOpenFilePanel({
+                formatName: 'de importación de funciones (.in)',
+                filters: [{ name: 'IN Files', extensions: ['in'] }],
+                multiple: true // **[MODIFICACIÓN - impor - Carga Múltiple]**  Permitir selección multiple
+            }).then(fileInfos => { // **[MODIFICACIÓN - impor - Carga Múltiple]**  Ahora recibe un array de fileInfos
+                if (fileInfos && Array.isArray(fileInfos) && fileInfos.length > 0) { // **[MODIFICACIÓN - impor - Carga Múltiple]**  Verificar si fileInfos es un array y no está vacío
+                    fileInfos.forEach(fileInfo => { // **[MODIFICACIÓN - impor - Carga Múltiple]**  Iterar sobre los fileInfos
+                        if (fileInfo && fileInfo.content) {
+                            const importJSCode = fileInfo.content;
+                            try {
+                                // **[CORRECCIÓN CLAVE]: Usar `window.eval()` para asegurar ámbito global**
+                                window.eval(importJSCode);
+                                loadedFplugPlugins.push(fileInfo.name); // **[NEW]** Track loaded plugin file names
+                                console.log("executeImporFiles - Plugins cargados actualmente (después de push):", loadedFplugPlugins); // **[DEBUG - Añadido log**
+                                mostrarMensaje(`--- Javascript code from file "${fileInfo.name}" (.in) executed and functions imported (Global Scope Corrected). ---`, 'exito'); // **[MODIFICADO]** Mensaje indica corrección de ámbito  [MODIFICACIÓN JS]: Tipo 'exito'
+                            } catch (error) {
+                                mostrarMensaje(`Error executing Javascript code from file "${fileInfo.name}" (.in): ${error}`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                                console.error("Error executing .in file content:", error);
+                            }
+                        } else {
+                            mostrarMensaje(`No .in file selected or file content is empty for one of the selected files.`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                        }
+                    });
+                    mostrarMensaje(`All selected .in files processed. Total files loaded: ${fileInfos.length}.`, 'exito'); // **[MODIFICACIÓN - impor - Carga Múltiple]** Mensaje final con conteo de archivos cargados [MODIFICACIÓN JS]: Tipo 'exito'
+
+                } else {
+                    mostrarMensaje("No .in file selected or file content is empty.", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                }
+            }).catch(error => {
+                mostrarMensaje(`Error opening or reading .in import file: ${error}`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            });
+        }
+
+
+        function resetSys() {
+            outputArea.value = "";
+            spectrumValue = "010";
+            db.resetDB();
+            // **[CHANGE 8]:** Clear the libraries list on system reset
+            loadedLibs = [];
+            currentLib = null;
+            loadedFplugPlugins = []; // **[NEW]** Clear loaded Fplugmode plugins on system reset
+            mostrarMensaje("System reset to initial state. Spectrum Value: 010. Tables cleared. Loaded Libraries Cleared. Fplugmode Plugins Cleared.", 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+        }
+
+
+        function checkTblExists(args) {
+            if (args.length !== 1) {
+                mostrarMensaje("Error: Usage: tableExists <tableName>", 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                return;
+            }
+            const tableName = args[0];
+            const exists = db.tableExists(tableName);
+            mostrarMensaje(`Table "${tableName}" ${exists ? 'exists.' : 'does not exist.'}`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+        }
+
+        function execLibCmd(command, args) {
+            console.log(`--- execLibCmd() - Checking Library Commands - currentLib:`, currentLib);
+            // Now we will look for the command in ALL loaded libraries
+            let commandFound = false;
+            loadedLibs.forEach(library => {
+                if (library && library.libraryContent && library.libraryContent.hasOwnProperty(command)) {
+                    commandFound = true;
+                    const funcCode = library.libraryContent[command];
+                    try {
+                        const executableFunc = eval(`(${funcCode})`);
+                        if (typeof executableFunc !== 'function') {
+                            mostrarMensaje(`Error: Library function '${command}' in library "${library.libraryName || 'Unknown'}" is not valid.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                            return;
+                        }
+                        const output = executableFunc(args.join(" "));
+                        if (output !== undefined) {
+                            mostrarMensaje(output, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito' - Suponiendo que la ejecución de la función de la librería es exitosa
+                        }
+                    } catch (error) {
+                        mostrarMensaje(`Error executing library function '${command}' from library "${library.libraryName || 'Unknown'}": ${error}`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    }
+                }
+            });
+            if (!commandFound) {
+                console.log(`--- execCmd() - Unknown Command: ${command}`);
+                mostrarMensaje(`Error: Unknown command: ${command}. Type 'help' for available commands.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            }
+        }
+
+
+        cmdInput.addEventListener("keyup", function(event) {
+            if (event.key === "Enter") {
+                execCmd();
+            }
+        });
+
+        function downloadFile(data, filename, mimetype, successMessage) {
+            const blob = new Blob([data], { type: mimetype });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            mostrarMensaje(successMessage, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+        }
+
+        function uploadFile(acceptedFileTypes, onloadCallback, onerrorCallback, multiple = false) { // **[CHANGE 9]:** Added `multiple` parameter
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = acceptedFileTypes;
+            fileInput.style.display = 'none';
+            fileInput.multiple = multiple; // **[CHANGE 10]:** Enable multiple selection if `multiple` is true
+            document.body.appendChild(fileInput);
+
+            fileInput.onchange = function(event) {
+                const files = Array.from(event.target.files); // **[CHANGE 11]:** Get a list of files
+                if (!files || files.length === 0) {
+                    document.body.removeChild(fileInput);
+                    return;
+                }
+
+                let filesReadCount = 0;
+                files.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        onloadCallback(e.target.result, file.name); // **[CHANGE 12]:** `onloadCallback` processes each file individually
+                        filesReadCount++;
+                        if (filesReadCount === files.length) {
+                            document.body.removeChild(fileInput); // Remove input only when all files have been read
+                        }
+                    };
+                    reader.onerror = function() {
+                        onerrorCallback(file.name);
+                        filesReadCount++;
+                        if (filesReadCount === files.length) {
+                            document.body.removeChild(fileInput); // Remove input even if there are errors in reading
+                        }
+                    };
+                    reader.readAsText(file);
+                });
+            };
+            fileInput.click();
+        }
+
+
+        // **[CHANGE 13]:** `loadLibsFromFile` (plural) allows multiple selection and loads several libraries
+        function loadLibsFromFile() {
+            uploadFile('.li', function(fileContent, fileName) { // `onloadCallback` for each file
+                try {
+                    const loadedData = JSON.parse(fileContent);
+                    loadedData.libraryName = fileName; // **[CHANGE 14]:** Save the filename as library name
+                    loadedLibs.push(loadedData); // **[CHANGE 15]:** Add each library to the `loadedLibs` array
+                    currentLib = loadedData; // `currentLib` updates with the last loaded library for compatibility with `Tlib`
+                    mostrarMensaje(`Database Library imported from file ${fileName} (.li).`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+                } catch (error) {
+                    mostrarMensaje(`Error importing library from file ${fileName} (.li): Invalid file format.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    console.error("Error parsing .li file:", error);
+                }
+            }, function(fileName) { // `onerrorCallback` for each file
+                mostrarMensaje(`Error reading .li file ${fileName}.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            }, true // **[CHANGE 16]:** `multiple = true` to enable multiple selection in `uploadFile`
+            );
+        }
+
+
+        function loadDBFromFile() {
+            uploadFile('.r', function(fileContent, fileName) {
+                try {
+                    const loadedData = JSON.parse(fileContent);
+                    spectrumValue = loadedData.spectrumValue || "010";
+                    db.tables = loadedData.tables || {};
+                    mostrarMensaje(`Database and Spectrum Value imported from ${fileName} (.json).`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+                } catch (error) {
+                    mostrarMensaje(`Error importing data from ${fileName} (.r): Invalid file format.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    console.error("Error parsing .r file:", error);
+                }
+            }, function(fileName) {
+                mostrarMensaje(`Error reading .r file ${fileName}.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            });
+        }
+
+        function convertTxtToLi() {
+            uploadFile('.txt', function(textContent, fileName) {
+                try {
+                    const libContentJSON = JSON.parse(textContent);
+                    const liData = { spectrumValue: "010", libraryContent: libContentJSON };
+                    const liFormatData = JSON.stringify(liData, null, 2);
+                    downloadFile(liFormatData, fileName.replace('.txt', '.li'), 'application/octet-stream', `Text file "${fileName}" converted to "${fileName.replace('.txt', '.li')}" (.li).`);
+                } catch (error) {
+                    mostrarMensaje(`Error converting text file "${fileName}" to .li: Invalid JSON format in .txt file. Ensure it only contains libraryContent JSON.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    console.error("Error parsing JSON from .txt file:", error);
+                }
+            }, function(fileName) {
+                mostrarMensaje(`Error reading text file "${fileName}".`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            });
+        }
+
+        function enterLibMode() {
+            isLibMode = true;
+            dbButtonsDiv.style.display = 'none';
+            libConvButtonsDiv.style.display = 'flex';
+            mostrarMensaje("--- Entered librarymode Mode ---", 'librarymode-titulo'); //  [MODIFICACIÓN JS - titulo Librarymode]
+        }
+
+        function exitLibMode() {
+            isLibMode = false;
+            dbButtonsDiv.style.display = 'flex';
+            libConvButtonsDiv.style.display = 'none';
+            outputArea.innerHTML = ""; // [CORRECCIÓN]: Usar innerHTML para limpiar el div
+            mostrarMensaje("(librarymode environment closed)", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+        }
+
+        function enterFplugmode() { // **[NUEVO]** Función para entrar al entorno Fplugmode
+            isFplugmodeActive = true; // Establece la variable de estado a true para Fplugmode
+            dbButtonsDiv.style.display = 'none'; // Ocultar botones DB (opcional)
+            libConvButtonsDiv.style.display = 'none'; // Ocultar botones LibConv (opcional)
+            mostrarMensaje("--- Entered Fplugmode Environment ---", 'fplugmode-titulo'); //  [MODIFICACIÓN JS - titulo Fplugmode]
+        }
+
+        function exitFplugmode() { // **[NUEVO]** Función para salir del entorno Fplugmode
+            isFplugmodeActive = false; // Establece la variable de estado a false para Fplugmode
+            dbButtonsDiv.style.display = 'flex'; // Restaurar botones DB (si se ocultaron)
+            libConvButtonsDiv.style.display = 'flex'; // Restaurar botones LibConv (si se ocultaron)
+            outputArea.innerHTML = ""; // [CORRECCIÓN]: Usar innerHTML para limpiar el div
+            mostrarMensaje("--- Exited Fplugmode Environment ---", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            loadedFplugPlugins = []; // **[NEW]** Clear loaded Fplugmode plugins when exiting Fplugmode
+        }
+
+
+        // **[CHANGE 17]:** Implementation of the saveDB() function
+        function saveDB() {
+            const dataToExport = {
+                spectrumValue: spectrumValue,
+                tables: db.tables
+            };
+            const jsonString = JSON.stringify(dataToExport, null, 2); // Indented JSON format for better readability
+            downloadFile(jsonString, 'data', 'application/json', 'Database exported to data.r (.r).');
+        }
+
+        // **[NEW FUNCTION]**: displayDormantFunctionsHelp - Displays help for dormant functions
+        function displayDormantFunctionsHelp() {
+            mostrarMensaje("--- Dormant Functions Help ---", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- processPFile(fileContent): Dormant function to process .p files. Libraries can extend this to handle .p file content.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- analyzeHtmlContent(htmlContent): Dormant function to analyze generated HTML content. Libraries can extend this for HTML analysis.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- customizeUI(): Dormant function to customize the Debug Tool's UI. Libraries can extend this to add UI elements or modify existing ones.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- validatePFileContent(fileContent): Dormant function to validate .p file content. Libraries can extend this for custom validation rules.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- customizeHtmlDownload(htmlContent, originalFilename): Dormant function to customize .html file download. Libraries can extend this to modify download behavior.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- postProcessHtmlContent(htmlContent, originalFilename): Dormant function to post-process HTML content. Libraries can extend this to add elements or modify HTML.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- beforeExecCmd(command, args): Dormant function to intercept commands before execution. Libraries can use this for validation or logging.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- afterExecCmd(command, args, output): Dormant function to process command output. Libraries can use this for logging or output analysis.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- onLibLoad(libraryName, libraryContent): Dormant function executed on library load (.li). Libraries can use this for initialization.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- onSystemReset(): Dormant function executed on system reset ('Re' command). Libraries can use this for cleanup.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- customizeHelpMessage(currentHelpMessage): Dormant function to customize the 'help' command message. Libraries can extend this to add library commands to help.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("- executeCustomJavascript(javascriptCode): Dormant function to execute arbitrary Javascript. Use with extreme caution for advanced library features.", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+            mostrarMensaje("--- End of Dormant Functions Help ---", 'ayuda'); //  [MODIFICACIÓN JS]: Tipo 'ayuda'
+        }
+
+
+        // ***********************************************************************
+        // FUNCTIONS // **[asleep and will awake up when libraries use Them]//**
+        // ***********************************************************************
+
+        /**
+         * @function processPFile
+         * @description Dormant function to process .p files content. Libraries can extend this.
+         * Initially, it does nothing but return the original content.
+         * @param {string} fileContent - The content of the .p file.
+         * @returns {string} - The processed content (initially the same as input).
+         * @dormant - Libraries can redefine this function to add custom .p file processing logic.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Transform the .p content into a specific HTML structure.
+         * - Extract data from the .p content for further use.
+         * - Validate and modify the .p content before conversion.
+         */
+        function processPFile(fileContent) {
+            mostrarMensaje("Function 'processPFile' (dormant) called. Still does nothing.", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return fileContent; // By default, returns the original content
+        }
+
+        /**
+         * @function analyzeHtmlContent
+         * @description Dormant function to analyze generated HTML content. Libraries can extend this.
+         * Initially, it does nothing but return null.
+         * @param {string} htmlContent - The generated HTML content.
+         * @returns {null} - Initially returns null.
+         * @dormant - Libraries can redefine this function to add custom HTML analysis logic.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Parse the HTML content and extract specific information.
+         * - Perform checks or validations on the generated HTML.
+         * - Generate reports or summaries based on the HTML content analysis.
+         */
+        function analyzeHtmlContent(htmlContent) {
+            mostrarMensaje("Function 'analyzeHtmlContent' (dormant) called. Still does nothing.", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return null; // By default, returns null
+        }
+
+        /**
+         * @function customizeUI
+         * @description Dormant function to customize the Debug Tool's UI. Libraries can extend this.
+         * Initially, it does nothing.
+         * @dormant - Libraries can redefine this function to add UI customization logic.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Add new buttons or UI elements to the Debug Tool.
+         * - Modify existing UI elements' styles or behavior.
+         * - Dynamically update the UI based on library logic or data.
+         */
+        function customizeUI() {
+            mostrarMensaje("Function 'customizeUI' (dormant) called. Still does nothing.", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+        }
+
+        /**
+         * @function validatePFileContent
+         * @description Dormant function to validate .p file content before processing. Libraries can extend this.
+         * Initially, it always returns true (validation passes by default).
+         * @param {string} fileContent - The content of the .p file.
+         * @returns {boolean} - True if validation passes (initially always true).
+         * @dormant - Libraries can redefine this function to add custom .p file content validation logic.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Implement specific syntax checks for their .p file format.
+         * - Validate data integrity within the .p file.
+         * - Return 'false' and display error messages if validation fails, preventing further processing.
+         */
+        function validatePFileContent(fileContent) {
+            mostrarMensaje("Function 'validatePFileContent' (dormant) called. Validating .p file content... (still does nothing real).", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return true; // By default, validation always passes
+        }
+
+        /**
+         * @function customizeHtmlDownload
+         * @description Dormant function to customize the .html file download process. Libraries can extend this.
+         * Initially, it returns default download information (content, filename, mimetype, successMessage).
+         * @param {string} htmlContent - The HTML content to be downloaded.
+         * @param {string} originalFilename - The original .p filename.
+         * @returns {object} - An object containing download information (content, filename, mimetype, successMessage).
+         * @dormant - Libraries can redefine this function to customize .html download behavior.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Modify the downloaded .html filename (e.g., add versioning, use metadata).
+         * - Change the MIME type if needed.
+         * - Customize the success message displayed to the user.
+         * - Perform actions before or after the download.
+         */
+        function customizeHtmlDownload(htmlContent, originalFilename) {
+            mostrarMensaje("Function 'customizeHtmlDownload' (dormant) called. Customizing .html download... (still does nothing real).", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return {
+                content: htmlContent,
+                filename: originalFilename.replace('.p', '.html'), // Default .html filename
+                mimetype: 'text/html', // Default MIME type
+                successMessage: `Archivo .p convertido y descargado como ${originalFilename.replace('.p', '.html')} (.html).` // Default success message
+            };
+        }
+
+        /**
+         * @function postProcessHtmlContent
+         * @description Dormant function to add post-processing to the generated HTML content. Libraries can extend this.
+         * Initially, it returns the original htmlContent without modifications.
+         * @param {string} htmlContent - The HTML content.
+         * @param {string} originalFilename - The original .p filename.
+         * @returns {string} - The post-processed HTML content (initially the same as input).
+         * @dormant - Libraries can redefine this function to add custom HTML post-processing logic.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Add metadata tags (<meta>) to the HTML.
+         * - Insert common HTML elements (headers, footers, basic CSS).
+         * - Perform HTML beautification or transformations.
+         */
+        function postProcessHtmlContent(htmlContent, originalFilename) {
+            mostrarMensaje("Function 'postProcessHtmlContent' (dormant) called. Post-processing htmlContent... (still does nothing real).", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return htmlContent; // By default, returns the content unmodified
+        }
+
+        /**
+         * @function beforeExecCmd
+         * @description Dormant function to intercept commands BEFORE execution. Libraries can extend this for validation, logging, etc.
+         * Initially, it always returns true (allowing normal command execution).
+         * @param {string} command - The command to be executed.
+         * @param {array} args - Arguments for the command.
+         * @returns {boolean} - True to allow command execution (initially always true). False to prevent execution.
+         * @dormant - Libraries can redefine this function to intercept and control command execution.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Validate commands and arguments before execution.
+         * - Implement command logging and auditing.
+         * - Pre-process commands or arguments dynamically.
+         * - Implement basic command-level security or access control (though easily bypassed by modifying the library).
+         */
+        function beforeExecCmd(command, args) {
+            mostrarMensaje(`Function 'beforeExecCmd' (dormant) called. Command: '${command}', Args: ${args}.  Intercepting command... (still allows normal execution).`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return true; // By default, allow command execution
+        }
+
+        /**
+         * @function afterExecCmd
+         * @description Dormant function to process command OUTPUT AFTER execution. Libraries can extend this for logging, post-processing, etc.
+         * Initially, it returns the original output without modifications.
+         * @param {string} command - The command that was executed.
+         * @param {array} args - Arguments for the command.
+         * @param {string} output - The output generated by the command.
+         * @returns {string} - The processed output (initially the same as input).
+         * @dormant - Libraries can redefine this function to process and analyze command output.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Log command output for auditing or debugging.
+         * - Analyze command output to trigger secondary actions or events.
+         * - Modify or format the output before it is displayed to the user.
+         * - Extract specific information from the output for use in other library functions.
+         */
+        function afterExecCmd(command, args, output) {
+            mostrarMensaje(`Function 'afterExecCmd' (dormant) called. Command: '${command}', Args: ${args}, Output: ${output}. Post-processing output... (still does nothing real).`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return output; // By default, returns the original output
+        }
+
+        /**
+         * @function onLibLoad
+         * @description Dormant function to be executed AUTOMATICALLY when a library is loaded (.li). Libraries can extend this for initialization.
+         * Initially, it does nothing but display a message.
+         * @param {string} libraryName - The name of the loaded library (filename).
+         * @param {object} libraryContent - The content of the loaded library (parsed JSON).
+         * @dormant - Libraries can redefine this function to perform library-specific initialization tasks on load.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Initialize library-specific variables or data structures.
+         * - Customize the Debug Tool's UI when the library is loaded (add buttons, menus, etc.).
+         * - Register event listeners or perform setup tasks required for the library to function.
+         */
+        function onLibLoad(libraryName, libraryContent) {
+            mostrarMensaje(`Function 'onLibLoad' (dormant) called. Library: '${libraryName}'.  Initializing library... (still does nothing real).`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+        }
+
+        /**
+         * @function onSystemReset
+         * @description Dormant function to be executed AUTOMATICALLY when the system is reset (command 'Re'). Libraries can extend this for cleanup.
+         * Initially, it does nothing but display a message.
+         * @dormant - Libraries can redefine this function to perform library-specific cleanup or reset tasks on system reset.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Reset library-specific variables to their initial states.
+         * - Remove any UI customizations added by the library.
+         * - Disconnect from external resources or databases that the library might be using.
+         * - Perform any cleanup necessary to ensure the library behaves correctly after a system reset.
+         */
+        function onSystemReset() {
+            mostrarMensaje("Function 'onSystemReset' (dormant) called. Resetting library... (still does nothing real).", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+        }
+
+        /**
+         * @function customizeHelpMessage
+         * @description Dormant function to customize the 'help' command message. Libraries can extend this to add library commands to the main help.
+         * Initially, it returns the original help message without modifications.
+         * @param {string} currentHelpMessage - The default help message of the Debug Tool.
+         * @returns {string} - The customized help message (initially the same as input).
+         * @dormant - Libraries can redefine this function to customize the 'help' command output.
+         *
+         * @example Future Library Expansion:
+         * Libraries could redefine this function to:
+         * - Append library-specific commands and descriptions to the main help message.
+         * - Create a completely new help message, replacing the default one (less recommended, but possible).
+         * - Format or organize the help message in a custom way (e.g., grouping commands by category).
+         */
+        function customizeHelpMessage(currentHelpMessage) {
+            mostrarMensaje("Function 'customizeHelpMessage' (dormant) called. Customizing help message... (still does nothing real).", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return currentHelpMessage; // By default, returns the original help message
+        }
+
+        /**
+         * @function executeCustomJavascript
+         * @description Dormant function to execute arbitrary Javascript code provided by libraries. Libraries can extend this for ultimate flexibility.
+         * Initially, it does nothing and returns null.
+         * @param {string} javascriptCode - A string containing Javascript code to be executed.
+         * @returns {null} - Initially returns null. The return value of the executed Javascript code is not captured by default.
+         * @dormant - Libraries can redefine this function to inject and run custom Javascript code within the Debug Tool environment.
+         *
+         * @security-warning: Libraries should use this function with EXTREME CAUTION, as executing arbitrary Javascript code can introduce security risks if not handled properly.
+         *  It is crucial to ensure that the Javascript code being executed is TRUSTED and does not come from untrusted sources, especially in scenarios where the Debug Tool might handle sensitive data or interact with external systems.
+         */
+        function executeCustomJavascript(javascriptCode) {
+            mostrarMensaje("Function 'executeCustomJavascript' (dormant) called. Javascript code execution requested... (still does nothing real).", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            return null; // By default, does nothing and returns null
+        }
+
+        // **[MODIFICACIÓN Tflug CORRECTA - NUEVA FUNCIÓN PARA TESTEAR FUNCIÓN ESPECÍFICA]**
+        function testFplugFunctionSpecific(functionName) {
+            if (typeof window[functionName] === 'function') { // **[MODIFICACIÓN Tflug CORRECTA - VERIFICA SI ES FUNCIÓN GLOBAL]** Verifica si la función existe en el ámbito global
+                try {
+                    const result = window[functionName](); // **[MODIFICACIÓN Tflug CORRECTA - EJECUTA LA FUNCIÓN]** Ejecuta la función global
+                    mostrarMensaje(`Tflug Test: Function '${functionName}' executed successfully.`, 'exito'); // **[MODIFICACIÓN Tflug CORRECTA - MENSAJE DE ÉXITO]**  [MODIFICACIÓN JS]: Tipo 'exito'
+                    if (result !== undefined) { // **[MODIFICACIÓN Tflug CORRECTA - MUESTRA RESULTADO SI LO HAY]** Muestra el resultado si la función retorna algo
+                        mostrarMensaje(`Function '${functionName}' returned: ${result}`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                    }
+                } catch (error) {
+                    mostrarMensaje(`Tflug Test Error: Error executing function '${functionName}': ${error}`, 'error'); // **[MODIFICACIÓN Tflug CORRECTA - MANEJO DE ERRORES]**  [MODIFICACIÓN JS]: Tipo 'error'
+                    console.error(`Error executing function '${functionName}':`, error); // Log en consola para más detalle
+                }
+            } else {
+                mostrarMensaje(`Tflug Test Error: Function '${functionName}' is not defined or not a global function after .in import.`, 'error'); // **[MODIFICACIÓN Tflug CORRECTA - ERROR SI NO SE ENCUENTRA LA FUNCIÓN]**  [MODIFICACIÓN JS]: Tipo 'error'
+            }
+        }
+
+        // **[NEW FUNCTION] - testAllFplugFunctions**: Tests ALL functions from ALL loaded .in plugins **[MODIFICACIÓN Tflug CORRECTA - AHORA TESTEA TODAS LAS FUNCIONES]**
+        function testAllFplugFunctions() {
+            if (loadedFplugPlugins.length === 0) {
+                mostrarMensaje("Error: No .in plugins imported in Fplugmode. Use 'impor' command to import .in files first.", 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                return;
+            }
+
+            mostrarMensaje("--- Starting tests for all functions in loaded .in plugins... ---", 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            let allTestResults = {};
+
+            loadedFplugPlugins.forEach(pluginFileName => {
+                mostrarMensaje(`\n--- Testing functions from plugin file: ${pluginFileName} ---`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                let pluginTestResults = {};
+
+                for (const functionName in window) { // **[MODIFICACIÓN Tflug CORRECTA - ITERA SOBRE FUNCIONES GLOBALES]**  Itera sobre todas las propiedades del objeto window (ámbito global)
+                    if (window.hasOwnProperty(functionName) && typeof window[functionName] === 'function') { // **[MODIFICACIÓN Tflug CORRECTA - VERIFICA SI ES FUNCIÓN GLOBAL]**  Verifica que la propiedad sea una función y propia del objeto window
+                        if (loadedFplugPlugins.includes(pluginFileName)) { // **[MODIFICACIÓN Tflug CORRECTA - ASUME TODAS LAS FUNCIONES GLOBALES SON DEL PLUGIN ACTUAL]**  Asume que todas las funciones globales encontradas pertenecen a los plugins .in importados
+                            try {
+                                const result = window[functionName](); // **[MODIFICACIÓN Tflug CORRECTA - EJECUTA LA FUNCIÓN GLOBAL]** Ejecuta la función global
+                                pluginTestResults[functionName] = 'Success';
+                                mostrarMensaje(`  Function '${functionName}': Success`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+                                if (result !== undefined) {
+                                    mostrarMensaje(`    Function '${functionName}' returned: ${result}`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                                }
+                            } catch (error) {
+                                pluginTestResults[functionName] = `Error during execution - ${error}`;
+                                mostrarMensaje(`  Function '${functionName}': Error during execution - ${error}`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                                console.error(`Error executing function '${functionName}':`, error);
+                            }
+                        }
+                    }
+                }
+                allTestResults[pluginFileName] = pluginTestResults;
+                mostrarMensaje(`\n--- Tests for plugin file: ${pluginFileName} completed. See results above. ---`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+            });
+
+            mostrarMensaje("--- Tests for all functions in all loaded .in plugins completed. ---", 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'
+            console.log("All Fplugmode Plugins Test Results:", allTestResults); // Muestra resultados detallados en la consola
+            // Aquí podrías procesar `allTestResults` para mostrar un resumen general en `outputArea` si es necesario.
+        }
+
+
+        // **[NEW FUNCTION] - exportFplugmodePluginsToInpk**: Exports loaded Fplugmode plugins to .inpk
+        function exportFplugmodePluginsToInpk() {
+            console.log("exportFplugmodePluginsToInpk - Plugins cargados ANTES de la verificación:", loadedFplugPlugins); // **[DEBUG - Añadido log**
+            if (loadedFplugPlugins.length === 0) {
+                mostrarMensaje("Error: No .in plugins loaded in Fplugmode. Use 'impor' command to import .in files first.", 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                return;
+            }
+
+            // **[REFACTOR - exportFplugmodePluginsToInpk - RECOLECTAR CONTENIDO DE PLUGIN]**
+            const inpkData = {
+                spectrumValue: "010",
+                packagedPlugins: loadedFplugPlugins.map(pluginFileName => { // Mapea loadedFplugPlugins para extraer info relevante
+                    return {
+                        pluginFileName: pluginFileName, // Guarda el nombre del archivo del plugin
+                        // **[REFACTOR - exportFplugmodePluginsToInpk -  EXTRAER CONTENIDO DE PLUGIN DESDE EL ÁMBITO GLOBAL - NO IMPLEMENTADO AÚN -  NECESITA REFACTOR FUERTE ]**
+                        // pluginFunctions:  [...AQUÍ DEBERÍA IR LA LÓGICA PARA EXTRAER LAS FUNCIONES ASOCIADAS A ESTE PLUGIN...]
+                        // libraryContent: lib.libraryContent, // Esto NO APLICA AQUÍ -  los plugins .in NO SON LIBRERIAS .li
+                        // You can exclude other properties if not needed in the .inpk
+                    };
+                })
+            };
+            const inpkString = JSON.stringify(inpkData, null, 2); // Formato JSON para legibilidad
+
+            downloadFile(inpkString, 'plugin_package.inpk', 'application/octet-stream', 'Loaded Fplugmode plugins (imported .in files) exported to plugin_package.inpk (.inpk).');
+        }
+
+        // **[NEW FUNCTION] - loadInpkFromFile**: Loads .inpk plugin package
+        function loadInpkFromFile() {
+            uploadFile('.inpk', function(fileContent, fileName) {
+                try {
+                    const inpkPackage = JSON.parse(fileContent);
+                    if (!inpkPackage.packagedPlugins || !Array.isArray(inpkPackage.packagedPlugins)) {
+                        mostrarMensaje(`Error importing plugin package from file "${fileName}" (.inpk): Invalid .inpk format - packagedPlugins array missing or invalid.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                        return;
+                    }
+
+                    inpkPackage.packagedPlugins.forEach(pluginData => {
+                        if (pluginData.pluginFileName) { // **[REFACTOR - loadInpkFromFile -  RE-IMPORTAR PLUGIN .IN -  NO IMPLEMENTADO AÚN - NECESITA REFACTOR FUERTE ]**
+                            // loadedFplugPlugins.push(pluginData); // Esto NO APLICA AQUÍ -  los plugins .in NO SON LIBRERIAS .li -  NECESITA RE-EJECUTAR EL CÓDIGO .in  GUARDADO EN pluginData.pluginCode  (o similar)...
+                            mostrarMensaje(`Plugin "${pluginData.pluginFileName || 'Unknown Plugin'}" from package "${fileName}" (.inpk) -  **[Plugin code re-import NOT IMPLEMENTED yet -  Future version will re-import .in code from .inpk package]** -  Currently just tracking plugin filename in package.`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'  -  MENSAJE CLARO DE QUE RE-IMPORTAR EL CÓDIGO AÚN NO ESTÁ IMPLEMENTADO
+
+                            loadedFplugPlugins.push(pluginData.pluginFileName); //  AUNQUE NO RE-IMPORTA EL CÓDIGO -  AL MENOS RASTREA LOS NOMBRES DE ARCHIVO DE PLUGIN CARGADOS
+                            // mostrarMensaje(`Plugin "${pluginData.pluginFileName || 'Unknown Plugin'}" from package "${fileName}" (.inpk) -  imported.`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'  -  MENSAJE ANTERIOR -  ENGANOSO -  PORQUE NO RE-IMPORTA EL CÓDIGO -  SOLO RASTREA EL NOMBRE DE ARCHIVO
+                        } else {
+                            mostrarMensaje(`Warning: Plugin in package "${fileName}" (.inpk) is missing 'pluginFileName' and was not loaded.`, 'general'); //  [MODIFICACIÓN JS]: Tipo 'general'
+                        }
+                    });
+                    mostrarMensaje(`Plugin Package imported from file ${fileName} (.inpk) - ${inpkPackage.packagedPlugins.length} plugins (filenames tracked - code re-import not yet implemented).`, 'exito'); //  [MODIFICACIÓN JS]: Tipo 'exito'  -  MENSAJE FINAL ACTUALIZADO PARA REFLEJAR LA LIMITACIÓN ACTUAL
+
+                } catch (error) {
+                    mostrarMensaje(`Error importing plugin package from file "${fileName}" (.inpk): Invalid .inpk file format or corrupted package.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+                    console.error("Error parsing .inpk file:", error);
+                }
+            }, function(fileName) {
+                mostrarMensaje(`Error reading .inpk file ${fileName}.`, 'error'); //  [MODIFICACIÓN JS]: Tipo 'error'
+            }, false // Important: multiple=false for Lipkm - it loads ONE .inpk package file
+            );
+        }
+
+
+        // **[MODIFICACIÓN JS - mensaje bienvenida]**
+        mostrarMensaje("GGS environment - output-", 'bienvenida'); // Mostrar mensaje de bienvenida al inicio
+
+    </script>
+</body>
+</html>
